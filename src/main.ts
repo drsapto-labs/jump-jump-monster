@@ -177,9 +177,9 @@ renderer.canvas.addEventListener('click', (e) => {
   if (stateMachine.is(GameState.CALIBRATING)) {
     // Tombol Skip (Mulai Main)
     const skipBtnX = CANVAS_WIDTH / 2 - 110;
-    const skipBtnY = 350;
+    const skipBtnY = 335;
     const skipBtnW = 220;
-    const skipBtnH = 46;
+    const skipBtnH = 44;
     if (
       clickX >= skipBtnX && clickX <= skipBtnX + skipBtnW &&
       clickY >= skipBtnY && clickY <= skipBtnY + skipBtnH
@@ -199,7 +199,7 @@ renderer.canvas.addEventListener('click', (e) => {
   // Cek klik tombol webcam di menu (area tombol biru)
   if (stateMachine.is(GameState.MENU)) {
     const camBtnX = CANVAS_WIDTH / 2 - 100;
-    const camBtnY = 345;
+    const camBtnY = 356;
     const camBtnW = 200;
     const camBtnH = 42;
     if (
@@ -409,16 +409,22 @@ function renderMenuScreen(): void {
   });
 
   // Controls hint
-  renderer.drawText('↑ Lompat   ↓ Jongkok   ESC Pause   M Suara', CANVAS_WIDTH / 2, 320, {
+  renderer.drawText('🙌 Angkat Tangan / ↑ Lompat   •   ⬇️ Jongkok   •   ⬅️ ➡️ Geser', CANVAS_WIDTH / 2, 318, {
     font: '13px system-ui, sans-serif',
-    color: '#555577',
+    color: '#88AACC',
+    align: 'center',
+    shadow: false,
+  });
+  renderer.drawText('📱 Layar Sentuh: Swipe / Geser  •  Keyboard: Panah ↑ ↓ ← →', CANVAS_WIDTH / 2, 336, {
+    font: '11px system-ui, sans-serif',
+    color: '#667799',
     align: 'center',
     shadow: false,
   });
 
   // Webcam button
   const camBtnX = CANVAS_WIDTH / 2 - 100;
-  const camBtnY = 345;
+  const camBtnY = 356;
   const camBtnW = 200;
   const camBtnH = 42;
   const camIsActive = webcam.isTracking || webcam.currentStatus === 'CALIBRATING' || webcam.currentStatus === 'LOADING';
@@ -664,11 +670,22 @@ function renderCalibratingScreen(): void {
 
   // Controls info
   renderer.drawText(
-    '↑ Lompat  |  ↓ Jongkok  |  ← → Miring Kiri/Kanan (Menghindar)',
+    '🙌 Angkat Tangan / Lompat  |  ⬇️ Tunduk / Jongkok  |  ⬅️ ➡️ Geser Badan',
     CANVAS_WIDTH / 2,
-    285,
+    278,
     {
-      font: '13px system-ui, sans-serif',
+      font: 'bold 13px system-ui, sans-serif',
+      color: '#FFFFFF',
+      align: 'center',
+      shadow: false,
+    }
+  );
+  renderer.drawText(
+    '📱 Atau Swipe Layar (Atas/Bawah/Kiri/Kanan) / Tombol Panah Keyboard',
+    CANVAS_WIDTH / 2,
+    298,
+    {
+      font: '11px system-ui, sans-serif',
       color: '#8899AA',
       align: 'center',
       shadow: false,
@@ -677,7 +694,7 @@ function renderCalibratingScreen(): void {
 
   // Skip / Start Now button
   const skipBtnX = CANVAS_WIDTH / 2 - 110;
-  const skipBtnY = 325;
+  const skipBtnY = 335;
   const skipBtnW = 220;
   const skipBtnH = 44;
 
