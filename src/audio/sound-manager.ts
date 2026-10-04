@@ -304,4 +304,81 @@ export class SoundManager {
       // Ignore audio errors
     }
   }
+
+  /** Shield Bubble Pickup Sound — Nada gelembung magis ceria */
+  playShieldPickup(): void {
+    this.unlock();
+    if (!this.ctx || !this.masterGain || this._isMuted) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      const notes = [440, 554.37, 659.25, 880]; // A4 -> C#5 -> E5 -> A5
+      notes.forEach((freq, idx) => {
+        if (!this.ctx || !this.masterGain) return;
+        const noteStart = now + idx * 0.06;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, noteStart);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.2, noteStart + 0.1);
+
+        gain.gain.setValueAtTime(0.4, noteStart);
+        gain.gain.exponentialRampToValueAtTime(0.01, noteStart + 0.15);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+
+        osc.start(noteStart);
+        osc.stop(noteStart + 0.15);
+      });
+    } catch {
+      // Ignore audio errors
+    }
+  }
+
+  /** Shield Bubble Pop / Break Sound — Efek letusan gelembung pelindung */
+  playShieldBreak(): void {
+    this.unlock();
+    if (!this.ctx || !this.masterGain || this._isMuted) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      // 1. Bubble pop pitch drop
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(600, now);
+      osc.frequency.exponentialRampToValueAtTime(150, now + 0.15);
+
+      gain.gain.setValueAtTime(0.6, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(now);
+      osc.stop(now + 0.18);
+
+      // 2. Chime spark
+      const sparkOsc = this.ctx.createOscillator();
+      const sparkGain = this.ctx.createGain();
+
+      sparkOsc.type = 'triangle';
+      sparkOsc.frequency.setValueAtTime(1200, now);
+      sparkOsc.frequency.exponentialRampToValueAtTime(800, now + 0.2);
+
+      sparkGain.gain.setValueAtTime(0.3, now);
+      sparkGain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
+
+      sparkOsc.connect(sparkGain);
+      sparkGain.connect(this.masterGain);
+
+      sparkOsc.start(now);
+      sparkOsc.stop(now + 0.22);
+    } catch {
+      // Ignore audio errors
+    }
+  }
 }

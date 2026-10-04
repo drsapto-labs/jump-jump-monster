@@ -108,6 +108,30 @@ export class ParticleSystem {
     }
   }
 
+  /**
+   * Bubble Pop: Letusan butiran gelembung biru/cyan berkilau saat shield pecah/diambil
+   */
+  spawnBubblePop(x: number, y: number, count = 16): void {
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + (Math.random() * 0.4 - 0.2);
+      const speed = 2.5 + Math.random() * 3.5;
+      const life = 350 + Math.random() * 250;
+
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 16,
+        y: y + (Math.random() - 0.5) * 16,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 1.0,
+        gravity: 0.08,
+        size: 3 + Math.random() * 4,
+        color: Math.random() > 0.4 ? '#00E5FF' : '#E0F7FA',
+        shape: 'circle',
+        life,
+        maxLife: life,
+      });
+    }
+  }
+
   update(dt: number): void {
     const frameFactor = dt / 16;
 

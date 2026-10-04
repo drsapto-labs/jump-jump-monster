@@ -264,10 +264,17 @@ const gameLoop = new GameLoop(
     // Collectibles
     const collected = collectibles.update(dt, worldSpeed.speed, player);
     for (const c of collected) {
-      scoreManager.collectItem(c.x, c.y);
-      particleSystem.spawnStarBurst(c.x, c.y, 10);
-      soundManager.playCollect(scoreManager.multiplier);
-      renderer.flash('rgba(255, 230, 100, 0.25)', 120);
+      if (c.type === 'SHIELD') {
+        player.activateShield();
+        soundManager.playShieldPickup();
+        particleSystem.spawnBubblePop(c.x, c.y, 16);
+        renderer.flash('rgba(0, 229, 255, 0.35)', 160);
+      } else {
+        scoreManager.collectItem(c.x, c.y);
+        particleSystem.spawnStarBurst(c.x, c.y, 10);
+        soundManager.playCollect(scoreManager.multiplier);
+        renderer.flash('rgba(255, 230, 100, 0.25)', 120);
+      }
     }
 
     // Collision detection
@@ -276,13 +283,26 @@ const gameLoop = new GameLoop(
     } else {
       const hit = checkPlayerObstacleCollision(player, spawner.activeObstacles);
       if (hit) {
-        player.hurt();
-        collisionCooldown = 1200;
-        particleSystem.spawnHitSparks(player.x + player.width / 2, player.y + player.height / 2, 16);
-        soundManager.playHit();
-        renderer.shake(14, 320);
-        renderer.flash('rgba(255, 50, 50, 0.4)', 220);
-        stateMachine.transition(GameState.GAME_OVER);
+        if (player.hasShield) {
+          // BUBBLE SHIELD PROTECTS THE PLAYER!
+          player.breakShield();
+          hit.active = false; // hancurkan rintangan
+          collisionCooldown = 1000; // 1s invulnerability cooldown
+          soundManager.playShieldBreak();
+          particleSystem.spawnBubblePop(player.x + player.width / 2, player.y + player.height / 2, 20);
+          particleSystem.spawnHitSparks(hit.x + hit.width / 2, hit.y + hit.height / 2, 14);
+          renderer.shake(8, 200);
+          renderer.flash('rgba(0, 229, 255, 0.45)', 220);
+        } else {
+          // NO SHIELD -> GAME OVER
+          player.hurt();
+          collisionCooldown = 1200;
+          particleSystem.spawnHitSparks(player.x + player.width / 2, player.y + player.height / 2, 16);
+          soundManager.playHit();
+          renderer.shake(14, 320);
+          renderer.flash('rgba(255, 50, 50, 0.4)', 220);
+          stateMachine.transition(GameState.GAME_OVER);
+        }
       }
     }
   },
@@ -488,6 +508,14 @@ function renderGameScreen(): void {
       font: '14px system-ui, sans-serif',
       color: 'rgba(255,255,255,0.6)',
       shadow: false,
+    });
+  }
+
+  // HUD: Shield Active Badge
+  if (player.hasShield) {
+    renderer.drawText('🛡️ SHIELD AKTIF', hudX, 82, {
+      font: 'bold 13px system-ui, sans-serif',
+      color: '#00E5FF',
     });
   }
 

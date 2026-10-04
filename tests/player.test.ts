@@ -103,6 +103,33 @@ describe('Player', () => {
     for (let i = 0; i < 120; i++) player.update(16);
     expect(landCalled).toBe(true);
   });
+
+  it('starts without shield', () => {
+    expect(player.hasShield).toBe(false);
+  });
+
+  it('activates shield on activateShield()', () => {
+    player.activateShield();
+    expect(player.hasShield).toBe(true);
+  });
+
+  it('breaks shield and triggers invulnerability frames', () => {
+    player.activateShield();
+    const broke = player.breakShield();
+    expect(broke).toBe(true);
+    expect(player.hasShield).toBe(false);
+
+    // Second break should return false
+    const brokeAgain = player.breakShield();
+    expect(brokeAgain).toBe(false);
+  });
+
+  it('reset() clears active shield', () => {
+    player.activateShield();
+    expect(player.hasShield).toBe(true);
+    player.reset();
+    expect(player.hasShield).toBe(false);
+  });
 });
 
 describe('WorldSpeed', () => {

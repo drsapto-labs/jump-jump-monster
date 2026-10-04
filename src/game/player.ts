@@ -52,12 +52,32 @@ export class Player {
   private scaleY = 1;
   private animTimer = 0;
 
+  // Bubble Shield
+  private _hasShield = false;
+
   // Particle callbacks
   onTakeoff?: () => void;
   onLand?: () => void;
 
   get state(): PlayerState {
     return this._state;
+  }
+
+  get hasShield(): boolean {
+    return this._hasShield;
+  }
+
+  activateShield(): void {
+    this._hasShield = true;
+  }
+
+  breakShield(): boolean {
+    if (this._hasShield) {
+      this._hasShield = false;
+      this.hurtTimer = 1000; // 1s invulnerability frames (flashing)
+      return true;
+    }
+    return false;
   }
 
   get leanDirection(): 'LEFT' | 'RIGHT' | 'CENTER' {
@@ -278,6 +298,36 @@ export class Player {
       ctx.fillRect(w / 2 - 16, h / 2 - 4, 12, 8 - legAnim);
     }
 
+    // ── Bubble Shield Visual Effect ───────────────────────
+    if (this._hasShield) {
+      const shieldR = Math.max(w, h) * 0.78 + Math.sin(Date.now() / 150) * 2;
+
+      // Glow cyan
+      ctx.shadowColor = '#00E5FF';
+      ctx.shadowBlur = 18;
+
+      // Translucent bubble gradient
+      const shieldGrad = ctx.createRadialGradient(-shieldR * 0.25, -shieldR * 0.25, shieldR * 0.1, 0, 0, shieldR);
+      shieldGrad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
+      shieldGrad.addColorStop(0.5, 'rgba(0, 229, 255, 0.25)');
+      shieldGrad.addColorStop(1, 'rgba(0, 180, 216, 0.1)');
+      ctx.fillStyle = shieldGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, shieldR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bubble ring
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.85)';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // Specular gleam highlight
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      ctx.beginPath();
+      ctx.ellipse(-shieldR * 0.35, -shieldR * 0.35, shieldR * 0.25, shieldR * 0.12, -Math.PI / 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.restore();
   }
 
@@ -287,6 +337,7 @@ export class Player {
     this.targetX = PLAYER_X;
     this.leanDir = 'CENTER';
     this.tiltAngle = 0;
+    this._hasShield = false;
     this._y = PLAYER_GROUND_Y - PLAYER_HEIGHT;
     this._vy = 0;
     this.hurtTimer = 0;
