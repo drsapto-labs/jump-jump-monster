@@ -123,7 +123,9 @@ input.onAction((action) => {
   if (stateMachine.is(GameState.PLAYING)) {
     switch (action) {
       case InputAction.JUMP: {
-        const canJump = player.state === PlayerState.RUNNING;
+        const canJump =
+          player.state === PlayerState.RUNNING ||
+          player.state === PlayerState.DUCKING;
         player.jump();
         if (canJump) soundManager.playJump();
         break;

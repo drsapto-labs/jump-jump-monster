@@ -42,6 +42,13 @@ describe('Player', () => {
     expect(player.state).toBe(PlayerState.RUNNING);
   });
 
+  it('allows jumping directly from DUCKING state', () => {
+    player.startDuck();
+    expect(player.state).toBe(PlayerState.DUCKING);
+    player.jump();
+    expect(player.state).toBe(PlayerState.JUMPING);
+  });
+
   it('duck height is smaller than standing height', () => {
     const standingHeight = player.height;
     player.startDuck();

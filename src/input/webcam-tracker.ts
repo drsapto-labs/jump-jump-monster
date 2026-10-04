@@ -85,6 +85,7 @@ interface GestureState {
   isDucking: boolean;
   leanDir: 'LEFT' | 'RIGHT' | 'CENTER';
   jumpCooldown: number;   // ms sisa cooldown
+  jumpIndicatorTimer: number; // ms sisa tampil badge lompat di PiP
   duckHoldMs: number;     // ms duck sudah ditahan (untuk mencegah false duck)
   leanCooldown: number;
 }
@@ -113,6 +114,7 @@ export class WebcamTracker {
     isDucking: false,
     leanDir: 'CENTER',
     jumpCooldown: 0,
+    jumpIndicatorTimer: 0,
     duckHoldMs: 0,
     leanCooldown: 0,
   };
@@ -317,10 +319,12 @@ export class WebcamTracker {
     const nose = noseRaw && (noseRaw.visibility ?? 1) >= 0.25 ? smooth(LM.NOSE, noseRaw) : null;
 
     // Smooth pergelangan tangan (wrists) & siku (elbows)
-    const lw = lwRaw && (lwRaw.visibility ?? 1) >= 0.2 ? smooth(LM.LEFT_WRIST, lwRaw) : null;
-    const rw = rwRaw && (rwRaw.visibility ?? 1) >= 0.2 ? smooth(LM.RIGHT_WRIST, rwRaw) : null;
-    if (leRaw && (leRaw.visibility ?? 1) >= 0.2) smooth(LM.LEFT_ELBOW, leRaw);
-    if (reRaw && (reRaw.visibility ?? 1) >= 0.2) smooth(LM.RIGHT_ELBOW, reRaw);
+    // Gunakan visibility minimum 0.4 agar landmark halusinasi di luar frame tidak terpicu
+    const MIN_WRIST_VIS = 0.4;
+    const lw = lwRaw && (lwRaw.visibility ?? 1) >= MIN_WRIST_VIS ? smooth(LM.LEFT_WRIST, lwRaw) : null;
+    const rw = rwRaw && (rwRaw.visibility ?? 1) >= MIN_WRIST_VIS ? smooth(LM.RIGHT_WRIST, rwRaw) : null;
+    if (leRaw && (leRaw.visibility ?? 1) >= 0.3) smooth(LM.LEFT_ELBOW, leRaw);
+    if (reRaw && (reRaw.visibility ?? 1) >= 0.3) smooth(LM.RIGHT_ELBOW, reRaw);
 
     const shoulderMidY = (ls.y + rs.y) / 2;
     const shoulderMidX = (ls.x + rs.x) / 2;
@@ -376,10 +380,12 @@ export class WebcamTracker {
     const torso = cal.torsoHeight;
 
     // Deteksi Hands Up (🙌 Angkat Tangan):
-    // Tangan terangkat jika pergelangan tangan (wrist) berada di atas bahu
-    // (di koordinat kamera normal, y=0 adalah tepi atas layar).
-    const leftHandUp = lw !== null && lw.y < ls.y - 0.01;
-    const rightHandUp = rw !== null && rw.y < rs.y - 0.01;
+    // Tangan terangkat jika pergelangan tangan (wrist) berada nyata di atas bahu atau hidung
+    const wristMargin = Math.max(0.03, torso * 0.2);
+    const leftThresholdY = nose ? Math.min(nose.y + 0.02, ls.y - wristMargin) : ls.y - wristMargin;
+    const rightThresholdY = nose ? Math.min(nose.y + 0.02, rs.y - wristMargin) : rs.y - wristMargin;
+    const leftHandUp = lw !== null && lw.y < leftThresholdY;
+    const rightHandUp = rw !== null && rw.y < rightThresholdY;
     const isHandsUp = leftHandUp || rightHandUp;
 
     // Delta Y upper body relatif terhadap baseline
@@ -425,10 +431,14 @@ export class WebcamTracker {
       this.gesture.isJumping = true;
       this.gesture.isHandsUp = isHandsUp;
       this.gesture.jumpCooldown = GESTURE_COOLDOWN_MS;
+      this.gesture.jumpIndicatorTimer = 450; // Pop-up badge selama 450ms
       this.config.onAction(IA.JUMP);
-    } else if (!isTriggered && this.gesture.isJumping) {
-      // Hysteresis: reset status jumping saat tangan diturunkan DAN tubuh kembali turun
-      if (!isHandsUp && deltaY > threshold * 0.4) {
+    } else if (this.gesture.isJumping) {
+      // Hysteresis & safety release:
+      // Lepas status jumping jika tangan diturunkan DAN tubuh kembali mendekati baseline,
+      // ATAU jika cooldown sudah habis dan tangan sudah turun
+      const bodyReturned = deltaY > threshold * 0.4;
+      if (!isHandsUp && (bodyReturned || this.gesture.jumpCooldown <= 0)) {
         this.gesture.isJumping = false;
         this.gesture.isHandsUp = false;
       }
@@ -448,7 +458,7 @@ export class WebcamTracker {
         this.config.onAction(IA.DUCK_START);
       }
     } else {
-      if (this.gesture.isDucking && deltaY < threshold * 0.7) {
+      if (this.gesture.isDucking && deltaY < threshold * 0.6) {
         this.gesture.isDucking = false;
         this.config.onAction(IA.DUCK_END);
         this.gesture.duckHoldMs = 0;
@@ -480,6 +490,7 @@ export class WebcamTracker {
 
   private updateGestureCooldowns(dt: number): void {
     if (this.gesture.jumpCooldown > 0) this.gesture.jumpCooldown -= dt;
+    if (this.gesture.jumpIndicatorTimer > 0) this.gesture.jumpIndicatorTimer -= dt;
     if (this.gesture.leanCooldown > 0) this.gesture.leanCooldown -= dt;
   }
 
@@ -657,7 +668,7 @@ export class WebcamTracker {
     // Indikator gesture aktif di bawah PiP
     if (this.status === 'TRACKING') {
       const icons: string[] = [];
-      if (this.gesture.isJumping) {
+      if (this.gesture.jumpIndicatorTimer > 0) {
         if (this.gesture.isHandsUp) {
           icons.push('🙌 ANGKAT TANGAN!');
         } else {

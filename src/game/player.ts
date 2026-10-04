@@ -123,8 +123,11 @@ export class Player {
   }
 
   jump(): void {
-    // Hanya bisa lompat dari tanah
-    if (this._state === PlayerState.RUNNING) {
+    // Bisa lompat dari tanah (baik sedang lari maupun merunduk)
+    if (
+      this._state === PlayerState.RUNNING ||
+      this._state === PlayerState.DUCKING
+    ) {
       this._state = PlayerState.JUMPING;
       this._vy = JUMP_VELOCITY;
       // Squash saat takeoff
