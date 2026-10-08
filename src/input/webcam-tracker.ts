@@ -19,7 +19,6 @@ import {
   type PoseLandmarkerResult,
 } from '@mediapipe/tasks-vision';
 import {
-  JUMP_THRESHOLD_RATIO,
   DUCK_THRESHOLD_RATIO,
   GESTURE_COOLDOWN_MS,
   DUCK_MIN_HOLD_MS,
@@ -351,9 +350,9 @@ export class WebcamTracker {
     const rs = smooth(LM.RIGHT_SHOULDER, rsRaw);
     if (noseRaw && (noseRaw.visibility ?? 1) >= 0.25) smooth(LM.NOSE, noseRaw);
 
-    // Smooth pergelangan tangan (wrists) & siku (elbows)
-    // Gunakan visibility 0.25 (standar MediaPipe) agar tidak menolak tangan saat bergerak
-    const MIN_WRIST_VIS = 0.25;
+    // Smooth pergelangan tangan (wrists)
+    // Gunakan visibility 0.15 agar pergelangan tangan tetap terbaca saat bergerak cepat
+    const MIN_WRIST_VIS = 0.15;
     const lw = lwRaw && (lwRaw.visibility ?? 1) >= MIN_WRIST_VIS ? smooth(LM.LEFT_WRIST, lwRaw) : null;
     const rw = rwRaw && (rwRaw.visibility ?? 1) >= MIN_WRIST_VIS ? smooth(LM.RIGHT_WRIST, rwRaw) : null;
 
@@ -406,12 +405,13 @@ export class WebcamTracker {
     const torso = cal.torsoHeight;
 
     // Deteksi Hands Up (🙌 Angkat Tangan):
-    // Cukup pergelangan tangan (wrist) berada di atas garis bahu
-    const leftHandUp = lw !== null && lw.y < ls.y - 0.02;
-    const rightHandUp = rw !== null && rw.y < rs.y - 0.02;
+    // Tangan dianggap terangkat jika pergelangan tangan (wrist) naik sejajar atau di atas bahu
+    // (toleransi ls.y + 0.02 agar gerakan angkat tangan rileks/cepat langsung terbaca)
+    const leftHandUp = lw !== null && lw.y < ls.y + 0.02;
+    const rightHandUp = rw !== null && rw.y < rs.y + 0.02;
     const isHandsUp = leftHandUp || rightHandUp;
 
-    this.gesture.handsUpThresholdY = ls.y - 0.02;
+    this.gesture.handsUpThresholdY = ls.y + 0.02;
     this.gesture.leftHandUp = leftHandUp;
     this.gesture.rightHandUp = rightHandUp;
 
@@ -420,8 +420,7 @@ export class WebcamTracker {
 
     // Dynamic Drift: adaptasi baseline bahu saat posisi diam (mencegah drift saat berdiri/duduk)
     if (!this.gesture.isJumping && !this.gesture.isDucking) {
-      // Di mode Berdiri, adaptasi lebih cepat jika bahu turun lebih rendah dari baseline (kembali mendarat)
-      const driftRate = (this.mode === 'STANDING' && deltaY > 0) ? 0.05 : 0.005;
+      const driftRate = 0.01;
       cal.shoulderMidY = cal.shoulderMidY * (1 - driftRate) + shoulderMidY * driftRate;
     }
 
@@ -438,9 +437,8 @@ export class WebcamTracker {
     isHandsUp: boolean,
   ): void {
     // Naik dari baseline = deltaY negatif
-    const threshold = -JUMP_THRESHOLD_RATIO * torso;
-    // Di mode Duduk (SITTING): HANYA angkat tangan 🙌 yang memicu lompat (mencegah gerak badan kecil memicu loncat-loncat)
-    // Di mode Berdiri (STANDING): Loncat badan beneran ⬆️ ATAU angkat tangan 🙌 sama-sama memicu lompat
+    // Ambang lompat badan dibuat sensitif (0.045 x torso) agar loncat kecil langsung terbaca!
+    const threshold = -0.045 * torso;
     const isBodyJump = this.mode === 'STANDING' && deltaY < threshold;
 
     const isTriggered = isHandsUp || isBodyJump;
@@ -455,9 +453,7 @@ export class WebcamTracker {
       // Syarat reset jumping:
       // 1. Tangan HARUS sudah diturunkan (!isHandsUp)
       // 2. Cooldown HARUS sudah habis (jumpCooldown <= 0)
-      // 3. Jika loncat badan (isBodyJump/STANDING), posisi bahu HARUS sudah turun kembali mendekati baseline (deltaY > threshold * 0.5)
-      const bodyReturned = deltaY > threshold * 0.5;
-      if (!isHandsUp && bodyReturned && this.gesture.jumpCooldown <= 0) {
+      if (!isHandsUp && this.gesture.jumpCooldown <= 0) {
         this.gesture.isJumping = false;
         this.gesture.isHandsUp = false;
       }
