@@ -38,7 +38,7 @@ export const MULTIPLIER_MAX = 5;
 export const MULTIPLIER_DECAY_MS = 3000; // reset setelah 3 detik tanpa koin
 
 // ─── Gesture Detection (tuned untuk sensitivitas tinggi anak & dewasa) ─
-export const JUMP_THRESHOLD_RATIO = 0.045; // sensitif: lompatan kecil langsung trigger (sebelumnya 0.08 terlalu tinggi)
+export const JUMP_THRESHOLD_RATIO = 0.08; // butuh lompatan nyata (0.045 terlalu mudah terpicu oleh jitter noise kamera)
 export const DUCK_THRESHOLD_RATIO = 0.09;  // butuh runduk nyata (0.045 terlalu mudah terpicu saat duduk normal)
 export const LEAN_THRESHOLD_RATIO = 0.04;  // miring badan lebih responsif
 export const GESTURE_COOLDOWN_MS = 350;    // cooldown lebih singkat agar respon cepat

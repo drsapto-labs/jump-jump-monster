@@ -177,9 +177,27 @@ renderer.canvas.addEventListener('click', (e) => {
 
   // Cek klik di layar CALIBRATING
   if (stateMachine.is(GameState.CALIBRATING)) {
+    // Tombol Toggle Mode (Duduk / Berdiri)
+    const modeBtnY = 320;
+    const modeBtn1X = CANVAS_WIDTH / 2 - 140;
+    const modeBtn2X = CANVAS_WIDTH / 2 + 10;
+    const modeBtnW = 130;
+    const modeBtnH = 36;
+
+    if (clickY >= modeBtnY && clickY <= modeBtnY + modeBtnH) {
+      if (clickX >= modeBtn1X && clickX <= modeBtn1X + modeBtnW) {
+        webcam.setTrackingMode('SITTING');
+        return;
+      }
+      if (clickX >= modeBtn2X && clickX <= modeBtn2X + modeBtnW) {
+        webcam.setTrackingMode('STANDING');
+        return;
+      }
+    }
+
     // Tombol Skip (Mulai Main)
     const skipBtnX = CANVAS_WIDTH / 2 - 110;
-    const skipBtnY = 335;
+    const skipBtnY = 375;
     const skipBtnW = 220;
     const skipBtnH = 44;
     if (
@@ -198,12 +216,31 @@ renderer.canvas.addEventListener('click', (e) => {
     return;
   }
 
-  // Cek klik tombol webcam di menu (area tombol biru)
+  // Cek klik di layar MENU
   if (stateMachine.is(GameState.MENU)) {
+    // Mode toggle buttons
+    const modeBtnY = 350;
+    const modeBtn1X = CANVAS_WIDTH / 2 - 145;
+    const modeBtn2X = CANVAS_WIDTH / 2 + 15;
+    const modeBtnW = 130;
+    const modeBtnH = 34;
+
+    if (clickY >= modeBtnY && clickY <= modeBtnY + modeBtnH) {
+      if (clickX >= modeBtn1X && clickX <= modeBtn1X + modeBtnW) {
+        webcam.setTrackingMode('SITTING');
+        return;
+      }
+      if (clickX >= modeBtn2X && clickX <= modeBtn2X + modeBtnW) {
+        webcam.setTrackingMode('STANDING');
+        return;
+      }
+    }
+
+    // Tombol Webcam Start/Calibrate
     const camBtnX = CANVAS_WIDTH / 2 - 100;
-    const camBtnY = 356;
+    const camBtnY = 394;
     const camBtnW = 200;
-    const camBtnH = 42;
+    const camBtnH = 38;
     if (
       clickX >= camBtnX && clickX <= camBtnX + camBtnW &&
       clickY >= camBtnY && clickY <= camBtnY + camBtnH
@@ -212,6 +249,7 @@ renderer.canvas.addEventListener('click', (e) => {
         webcam.start().catch(console.error);
         stateMachine.transition(GameState.CALIBRATING);
       } else {
+        webcam.recalibrate();
         stateMachine.transition(GameState.CALIBRATING);
       }
       return;
@@ -411,24 +449,56 @@ function renderMenuScreen(): void {
   });
 
   // Controls hint
-  renderer.drawText('🙌 Angkat Tangan / ↑ Lompat   •   ⬇️ Jongkok   •   ⬅️ ➡️ Geser', CANVAS_WIDTH / 2, 318, {
-    font: '13px system-ui, sans-serif',
+  renderer.drawText('📹 Kamera: 🙌 Angkat Tangan / ⬇️ Jongkok', CANVAS_WIDTH / 2, 318, {
+    font: 'bold 13px system-ui, sans-serif',
     color: '#88AACC',
     align: 'center',
     shadow: false,
   });
-  renderer.drawText('📱 Layar Sentuh: Swipe / Geser  •  Keyboard: Panah ↑ ↓ ← →', CANVAS_WIDTH / 2, 336, {
+  renderer.drawText('📱 Swipe / ⌨️ Panah: ⬅️ ➡️ Geser Jalur  •  ↑ Lompat  •  ↓ Jongkok', CANVAS_WIDTH / 2, 336, {
     font: '11px system-ui, sans-serif',
     color: '#667799',
     align: 'center',
     shadow: false,
   });
 
+  // Mode toggle buttons (SITTING vs STANDING)
+  const modeBtnY = 350;
+  const modeBtn1X = CANVAS_WIDTH / 2 - 145;
+  const modeBtn2X = CANVAS_WIDTH / 2 + 15;
+  const modeBtnW = 130;
+  const modeBtnH = 34;
+  const isSitting = webcam.trackingMode === 'SITTING';
+
+  // Button 1: Mode Duduk
+  renderer.ctx.fillStyle = isSitting ? '#00AA55' : 'rgba(255, 255, 255, 0.12)';
+  renderer.ctx.beginPath();
+  renderer.ctx.roundRect(modeBtn1X, modeBtnY, modeBtnW, modeBtnH, 8);
+  renderer.ctx.fill();
+  renderer.drawText(isSitting ? '✔ 🪑 Mode Duduk' : '🪑 Mode Duduk', modeBtn1X + modeBtnW / 2, modeBtnY + 22, {
+    font: 'bold 12px system-ui, sans-serif',
+    color: '#FFFFFF',
+    align: 'center',
+    shadow: false,
+  });
+
+  // Button 2: Mode Berdiri
+  renderer.ctx.fillStyle = !isSitting ? '#00AA55' : 'rgba(255, 255, 255, 0.12)';
+  renderer.ctx.beginPath();
+  renderer.ctx.roundRect(modeBtn2X, modeBtnY, modeBtnW, modeBtnH, 8);
+  renderer.ctx.fill();
+  renderer.drawText(!isSitting ? '✔ 🧍 Mode Berdiri' : '🧍 Mode Berdiri', modeBtn2X + modeBtnW / 2, modeBtnY + 22, {
+    font: 'bold 12px system-ui, sans-serif',
+    color: '#FFFFFF',
+    align: 'center',
+    shadow: false,
+  });
+
   // Webcam button
   const camBtnX = CANVAS_WIDTH / 2 - 100;
-  const camBtnY = 356;
+  const camBtnY = 394;
   const camBtnW = 200;
-  const camBtnH = 42;
+  const camBtnH = 38;
   const camIsActive = webcam.isTracking || webcam.currentStatus === 'CALIBRATING' || webcam.currentStatus === 'LOADING';
   const camBtnColor = camIsActive ? '#00AA55' : webcam.currentStatus === 'DENIED' ? '#882222' : '#2255AA';
 
@@ -444,8 +514,8 @@ function renderMenuScreen(): void {
     webcam.isTracking ? '🟢 Webcam Aktif' :
     '📸 Aktifkan Kamera';
 
-  renderer.drawText(camLabel, CANVAS_WIDTH / 2, camBtnY + 28, {
-    font: 'bold 14px system-ui, sans-serif',
+  renderer.drawText(camLabel, CANVAS_WIDTH / 2, camBtnY + 25, {
+    font: 'bold 13px system-ui, sans-serif',
     color: '#FFFFFF',
     align: 'center',
     shadow: false,
@@ -453,7 +523,7 @@ function renderMenuScreen(): void {
 
   // High score
   if (scoreManager.highScore > 0) {
-    renderer.drawText(`🏆 Best: ${scoreManager.formattedHighScore}`, CANVAS_WIDTH / 2, 412, {
+    renderer.drawText(`🏆 Best: ${scoreManager.formattedHighScore}`, CANVAS_WIDTH / 2, 444, {
       font: '15px system-ui, sans-serif',
       color: COLORS.collectible,
       align: 'center',
@@ -672,7 +742,7 @@ function renderCalibratingScreen(): void {
 
   // Controls info
   renderer.drawText(
-    '🙌 Angkat Tangan / Lompat  |  ⬇️ Tunduk / Jongkok  |  ⬅️ ➡️ Geser Badan',
+    '🙌 Angkat Tangan / Lompat  |  ⬇️ Tunduk / Jongkok',
     CANVAS_WIDTH / 2,
     278,
     {
@@ -683,7 +753,7 @@ function renderCalibratingScreen(): void {
     }
   );
   renderer.drawText(
-    '📱 Atau Swipe Layar (Atas/Bawah/Kiri/Kanan) / Tombol Panah Keyboard',
+    '📱 Swipe Layar / ⌨️ Panah Kiri-Kanan untuk Geser Jalur',
     CANVAS_WIDTH / 2,
     298,
     {
@@ -694,9 +764,41 @@ function renderCalibratingScreen(): void {
     }
   );
 
+  // Mode toggle buttons (SITTING vs STANDING)
+  const modeBtnY = 320;
+  const modeBtn1X = CANVAS_WIDTH / 2 - 140;
+  const modeBtn2X = CANVAS_WIDTH / 2 + 10;
+  const modeBtnW = 130;
+  const modeBtnH = 36;
+  const isSitting = webcam.trackingMode === 'SITTING';
+
+  // Button 1: Mode Duduk
+  ctx.fillStyle = isSitting ? '#00AA55' : 'rgba(255, 255, 255, 0.12)';
+  ctx.beginPath();
+  ctx.roundRect(modeBtn1X, modeBtnY, modeBtnW, modeBtnH, 8);
+  ctx.fill();
+  renderer.drawText(isSitting ? '✔ 🪑 Mode Duduk' : '🪑 Mode Duduk', modeBtn1X + modeBtnW / 2, modeBtnY + 23, {
+    font: 'bold 12px system-ui, sans-serif',
+    color: '#FFFFFF',
+    align: 'center',
+    shadow: false,
+  });
+
+  // Button 2: Mode Berdiri
+  ctx.fillStyle = !isSitting ? '#00AA55' : 'rgba(255, 255, 255, 0.12)';
+  ctx.beginPath();
+  ctx.roundRect(modeBtn2X, modeBtnY, modeBtnW, modeBtnH, 8);
+  ctx.fill();
+  renderer.drawText(!isSitting ? '✔ 🧍 Mode Berdiri' : '🧍 Mode Berdiri', modeBtn2X + modeBtnW / 2, modeBtnY + 23, {
+    font: 'bold 12px system-ui, sans-serif',
+    color: '#FFFFFF',
+    align: 'center',
+    shadow: false,
+  });
+
   // Skip / Start Now button
   const skipBtnX = CANVAS_WIDTH / 2 - 110;
-  const skipBtnY = 335;
+  const skipBtnY = 375;
   const skipBtnW = 220;
   const skipBtnH = 44;
 
@@ -712,7 +814,7 @@ function renderCalibratingScreen(): void {
     shadow: false,
   });
 
-  renderer.drawText('ENTER atau SPACE untuk langsung main', CANVAS_WIDTH / 2, 395, {
+  renderer.drawText('ENTER atau SPACE untuk langsung main', CANVAS_WIDTH / 2, 435, {
     font: '12px system-ui, sans-serif',
     color: '#667788',
     align: 'center',

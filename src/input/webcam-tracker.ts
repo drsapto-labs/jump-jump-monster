@@ -21,7 +21,6 @@ import {
 import {
   JUMP_THRESHOLD_RATIO,
   DUCK_THRESHOLD_RATIO,
-  LEAN_THRESHOLD_RATIO,
   GESTURE_COOLDOWN_MS,
   DUCK_MIN_HOLD_MS,
   SMOOTHING_FACTOR,
@@ -56,6 +55,8 @@ export type WebcamStatus =
   | 'DENIED'
   | 'ERROR';
 
+export type TrackingMode = 'SITTING' | 'STANDING';
+
 export interface WebcamTrackerConfig {
   onAction: (action: InputAction) => void;
   onStatusChange?: (status: WebcamStatus, message?: string) => void;
@@ -70,8 +71,7 @@ interface LandmarkSmoothed {
 
 // ─── Calibration Baseline ─────────────────────────────────────
 interface CalibrationBaseline {
-  shoulderMidY: number;   // Y tengah bahu (normalized, 0-1)
-  upperBodyY: number;     // Y gabungan bahu & hidung (sangat stabil untuk jump/duck)
+  shoulderMidY: number;   // Y tengah bahu (normalized, 0-1) - anchor utama posisi tubuh
   hipMidY: number;        // Y tengah pinggul (normalized)
   torsoHeight: number;    // skala tubuh/torso (unit relatif)
   shoulderMidX: number;   // X tengah bahu (untuk deteksi lean)
@@ -88,6 +88,9 @@ interface GestureState {
   jumpIndicatorTimer: number; // ms sisa tampil badge lompat di PiP
   duckHoldMs: number;     // ms duck sudah ditahan (untuk mencegah false duck)
   leanCooldown: number;
+  handsUpThresholdY: number; // Y garis ambang angkat tangan (normalized)
+  leftHandUp: boolean;
+  rightHandUp: boolean;
 }
 
 export class WebcamTracker {
@@ -97,6 +100,7 @@ export class WebcamTracker {
   private animFrameId: number | null = null;
 
   private status: WebcamStatus = 'IDLE';
+  private mode: TrackingMode = 'STANDING'; // Default: Berdiri (Active Motion mode)
   private readonly config: WebcamTrackerConfig;
 
   // EMA smoothed landmarks
@@ -105,7 +109,6 @@ export class WebcamTracker {
   // Kalibrasi
   private calibration: CalibrationBaseline | null = null;
   private readonly CALIBRATION_FRAMES = 30; // 30 frame ≈ 0.5 detik pada 60fps
-  private prevUpperBodyY: number | null = null;
 
   // Gesture state machine
   private gesture: GestureState = {
@@ -117,6 +120,9 @@ export class WebcamTracker {
     jumpIndicatorTimer: 0,
     duckHoldMs: 0,
     leanCooldown: 0,
+    handsUpThresholdY: 0,
+    leftHandUp: false,
+    rightHandUp: false,
   };
 
   // PiP canvas untuk render preview
@@ -133,6 +139,32 @@ export class WebcamTracker {
 
   get isTracking(): boolean {
     return this.status === 'TRACKING';
+  }
+
+  get trackingMode(): TrackingMode {
+    return this.mode;
+  }
+
+  setTrackingMode(newMode: TrackingMode): void {
+    if (this.mode !== newMode) {
+      this.mode = newMode;
+      console.log(`[WebcamTracker] Switched to mode: ${newMode}`);
+      this.recalibrate();
+    }
+  }
+
+  /** Mulai proses kalibrasi ulang posisi baseline bahu */
+  recalibrate(): void {
+    if (this.status === 'TRACKING' || this.status === 'CALIBRATING') {
+      this.calibration = {
+        shoulderMidY: 0,
+        hipMidY: 0,
+        torsoHeight: 0.15,
+        shoulderMidX: 0.5,
+        samples: 0,
+      };
+      this.setStatus('CALIBRATING');
+    }
   }
 
   get calibrationProgress(): number {
@@ -209,13 +241,11 @@ export class WebcamTracker {
     this.setStatus('CALIBRATING');
     this.calibration = {
       shoulderMidY: 0,
-      upperBodyY: 0,
       hipMidY: 0,
       torsoHeight: 0.15, // default fallback
       shoulderMidX: 0.5,
       samples: 0,
     };
-    this.prevUpperBodyY = null;
 
     this.scheduleFrame();
   }
@@ -250,15 +280,20 @@ export class WebcamTracker {
       return;
     }
 
-    const dt = timestamp - this.lastFrameTime;
-    this.lastFrameTime = timestamp;
+    try {
+      const dt = timestamp - this.lastFrameTime;
+      this.lastFrameTime = timestamp;
 
-    // Deteksi pose dari frame video saat ini
-    const result = this.poseLandmarker.detectForVideo(this.videoEl, timestamp);
+      // Deteksi pose dari frame video saat ini
+      const result = this.poseLandmarker.detectForVideo(this.videoEl, timestamp);
 
-    this.processResult(result, dt);
-    this.renderPiP(result);
-    this.scheduleFrame();
+      this.processResult(result, dt);
+      this.renderPiP(result);
+    } catch (err) {
+      console.error('[WebcamTracker] Error in frame loop:', err);
+    } finally {
+      this.scheduleFrame();
+    }
   }
 
   private processResult(result: PoseLandmarkerResult, dt: number): void {
@@ -277,8 +312,6 @@ export class WebcamTracker {
     const noseRaw = raw[LM.NOSE];
     const lwRaw = raw[LM.LEFT_WRIST];
     const rwRaw = raw[LM.RIGHT_WRIST];
-    const leRaw = raw[LM.LEFT_ELBOW];
-    const reRaw = raw[LM.RIGHT_ELBOW];
     const lhRaw = raw[LM.LEFT_HIP];
     const rhRaw = raw[LM.RIGHT_HIP];
 
@@ -316,22 +349,17 @@ export class WebcamTracker {
 
     const ls = smooth(LM.LEFT_SHOULDER, lsRaw);
     const rs = smooth(LM.RIGHT_SHOULDER, rsRaw);
-    const nose = noseRaw && (noseRaw.visibility ?? 1) >= 0.25 ? smooth(LM.NOSE, noseRaw) : null;
+    if (noseRaw && (noseRaw.visibility ?? 1) >= 0.25) smooth(LM.NOSE, noseRaw);
 
     // Smooth pergelangan tangan (wrists) & siku (elbows)
-    // Gunakan visibility minimum 0.4 agar landmark halusinasi di luar frame tidak terpicu
-    const MIN_WRIST_VIS = 0.4;
+    // Gunakan visibility 0.25 (standar MediaPipe) agar tidak menolak tangan saat bergerak
+    const MIN_WRIST_VIS = 0.25;
     const lw = lwRaw && (lwRaw.visibility ?? 1) >= MIN_WRIST_VIS ? smooth(LM.LEFT_WRIST, lwRaw) : null;
     const rw = rwRaw && (rwRaw.visibility ?? 1) >= MIN_WRIST_VIS ? smooth(LM.RIGHT_WRIST, rwRaw) : null;
-    if (leRaw && (leRaw.visibility ?? 1) >= 0.3) smooth(LM.LEFT_ELBOW, leRaw);
-    if (reRaw && (reRaw.visibility ?? 1) >= 0.3) smooth(LM.RIGHT_ELBOW, reRaw);
 
     const shoulderMidY = (ls.y + rs.y) / 2;
     const shoulderMidX = (ls.x + rs.x) / 2;
     const shoulderDist = Math.hypot(rs.x - ls.x, rs.y - ls.y);
-
-    // Titik jangkar tubuh atas: gabungan bahu & hidung (sangat stabil & responsif saat melompat)
-    const upperBodyY = nose ? shoulderMidY * 0.65 + nose.y * 0.35 : shoulderMidY;
 
     // Skala tubuh (torso): jika pinggul terlihat, pakai jarak bahu-pinggul.
     // Jika pinggul di luar frame (misal orang dewasa berdiri dekat laptop), estimasi dari lebar bahu!
@@ -359,7 +387,6 @@ export class WebcamTracker {
 
       // Running average untuk kalibrasi
       c.shoulderMidY = c.shoulderMidY * (1 - weight) + shoulderMidY * weight;
-      c.upperBodyY = c.upperBodyY * (1 - weight) + upperBodyY * weight;
       c.hipMidY = c.hipMidY * (1 - weight) + hipMidY * weight;
       c.torsoHeight = c.torsoHeight * (1 - weight) + currentTorso * weight;
       c.shoulderMidX = c.shoulderMidX * (1 - weight) + shoulderMidX * weight;
@@ -367,7 +394,6 @@ export class WebcamTracker {
 
       if (c.samples >= this.CALIBRATION_FRAMES) {
         c.torsoHeight = Math.max(0.08, c.torsoHeight);
-        this.prevUpperBodyY = upperBodyY;
         this.setStatus('TRACKING');
       }
       return; // Saat kalibrasi, belum emit gesture
@@ -380,33 +406,28 @@ export class WebcamTracker {
     const torso = cal.torsoHeight;
 
     // Deteksi Hands Up (🙌 Angkat Tangan):
-    // Tangan terangkat jika pergelangan tangan (wrist) berada nyata di atas bahu atau hidung
-    const wristMargin = Math.max(0.03, torso * 0.2);
-    const leftThresholdY = nose ? Math.min(nose.y + 0.02, ls.y - wristMargin) : ls.y - wristMargin;
-    const rightThresholdY = nose ? Math.min(nose.y + 0.02, rs.y - wristMargin) : rs.y - wristMargin;
-    const leftHandUp = lw !== null && lw.y < leftThresholdY;
-    const rightHandUp = rw !== null && rw.y < rightThresholdY;
+    // Cukup pergelangan tangan (wrist) berada di atas garis bahu
+    const leftHandUp = lw !== null && lw.y < ls.y - 0.02;
+    const rightHandUp = rw !== null && rw.y < rs.y - 0.02;
     const isHandsUp = leftHandUp || rightHandUp;
 
-    // Delta Y upper body relatif terhadap baseline
-    // Saat lompat (tubuh naik): deltaY negatif
-    // Saat jongkok (tubuh turun): deltaY positif
-    const deltaY = upperBodyY - cal.upperBodyY;
+    this.gesture.handsUpThresholdY = ls.y - 0.02;
+    this.gesture.leftHandUp = leftHandUp;
+    this.gesture.rightHandUp = rightHandUp;
 
-    // Kecepatan sentakan impuls ke atas
-    const upwardSpeed =
-      this.prevUpperBodyY !== null
-        ? (this.prevUpperBodyY - upperBodyY) / Math.max(1, dt)
-        : 0;
-    this.prevUpperBodyY = upperBodyY;
+    // Delta Y bahu relatif terhadap baseline (naik = negatif, turun = positif)
+    const deltaY = shoulderMidY - cal.shoulderMidY;
 
-    // Lean: posisi X bahu bergeser dari baseline
-    const deltaX = shoulderMidX - cal.shoulderMidX;
+    // Dynamic Drift: adaptasi baseline bahu saat posisi diam (mencegah drift saat berdiri/duduk)
+    if (!this.gesture.isJumping && !this.gesture.isDucking) {
+      // Di mode Berdiri, adaptasi lebih cepat jika bahu turun lebih rendah dari baseline (kembali mendarat)
+      const driftRate = (this.mode === 'STANDING' && deltaY > 0) ? 0.05 : 0.005;
+      cal.shoulderMidY = cal.shoulderMidY * (1 - driftRate) + shoulderMidY * driftRate;
+    }
 
     this.updateGestureCooldowns(dt);
-    this.detectJump(deltaY, torso, upwardSpeed, isHandsUp);
+    this.detectJump(deltaY, torso, isHandsUp);
     this.detectDuck(deltaY, torso, dt);
-    this.detectLean(deltaX, torso, dt);
   }
 
   // ─── Gesture State Machine ────────────────────────────────
@@ -414,31 +435,29 @@ export class WebcamTracker {
   private detectJump(
     deltaY: number,
     torso: number,
-    upwardSpeed: number,
     isHandsUp: boolean,
   ): void {
     // Naik dari baseline = deltaY negatif
     const threshold = -JUMP_THRESHOLD_RATIO * torso;
-    // Boleh terpicu via displacement ketinggian (deltaY < threshold)
-    // ATAU via kecepatan impuls sentakan ke atas saat baru lepas dari lantai
-    const isImpulse = upwardSpeed > 0.00035 && deltaY < -0.015 * torso;
-    const isBodyJump = deltaY < threshold || isImpulse;
+    // Di mode Duduk (SITTING): HANYA angkat tangan 🙌 yang memicu lompat (mencegah gerak badan kecil memicu loncat-loncat)
+    // Di mode Berdiri (STANDING): Loncat badan beneran ⬆️ ATAU angkat tangan 🙌 sama-sama memicu lompat
+    const isBodyJump = this.mode === 'STANDING' && deltaY < threshold;
 
-    // Trigger jika angkat tangan 🙌 ATAU loncat badan penuh ⬆️
     const isTriggered = isHandsUp || isBodyJump;
 
     if (isTriggered && !this.gesture.isJumping && this.gesture.jumpCooldown <= 0) {
       this.gesture.isJumping = true;
       this.gesture.isHandsUp = isHandsUp;
       this.gesture.jumpCooldown = GESTURE_COOLDOWN_MS;
-      this.gesture.jumpIndicatorTimer = 450; // Pop-up badge selama 450ms
+      this.gesture.jumpIndicatorTimer = 500; // Pop-up badge selama 500ms
       this.config.onAction(IA.JUMP);
     } else if (this.gesture.isJumping) {
-      // Hysteresis & safety release:
-      // Lepas status jumping jika tangan diturunkan DAN tubuh kembali mendekati baseline,
-      // ATAU jika cooldown sudah habis dan tangan sudah turun
-      const bodyReturned = deltaY > threshold * 0.4;
-      if (!isHandsUp && (bodyReturned || this.gesture.jumpCooldown <= 0)) {
+      // Syarat reset jumping:
+      // 1. Tangan HARUS sudah diturunkan (!isHandsUp)
+      // 2. Cooldown HARUS sudah habis (jumpCooldown <= 0)
+      // 3. Jika loncat badan (isBodyJump/STANDING), posisi bahu HARUS sudah turun kembali mendekati baseline (deltaY > threshold * 0.5)
+      const bodyReturned = deltaY > threshold * 0.5;
+      if (!isHandsUp && bodyReturned && this.gesture.jumpCooldown <= 0) {
         this.gesture.isJumping = false;
         this.gesture.isHandsUp = false;
       }
@@ -465,26 +484,6 @@ export class WebcamTracker {
       } else if (!this.gesture.isDucking) {
         this.gesture.duckHoldMs = 0;
       }
-    }
-  }
-
-  private detectLean(deltaX: number, torso: number, _dt: number): void {
-    if (this.gesture.leanCooldown > 0) return;
-
-    const threshold = LEAN_THRESHOLD_RATIO * torso;
-
-    // Note: X sudah di-flip di EMA — deltaX > 0 = lean kanan
-    if (deltaX > threshold && this.gesture.leanDir !== 'RIGHT') {
-      this.gesture.leanDir = 'RIGHT';
-      this.gesture.leanCooldown = GESTURE_COOLDOWN_MS / 2;
-      this.config.onAction(IA.LEAN_RIGHT);
-    } else if (deltaX < -threshold && this.gesture.leanDir !== 'LEFT') {
-      this.gesture.leanDir = 'LEFT';
-      this.gesture.leanCooldown = GESTURE_COOLDOWN_MS / 2;
-      this.config.onAction(IA.LEAN_LEFT);
-    } else if (Math.abs(deltaX) < threshold * 0.5 && this.gesture.leanDir !== 'CENTER') {
-      this.gesture.leanDir = 'CENTER';
-      this.config.onAction(IA.LEAN_CENTER);
     }
   }
 
@@ -533,9 +532,10 @@ export class WebcamTracker {
     }
 
     // Label status
+    const modeTag = this.mode === 'SITTING' ? '🪑 DUDUK' : '🧍 BERDIRI';
     const label =
       this.status === 'TRACKING'
-        ? '🟢 TRACKING'
+        ? `🟢 ${modeTag}`
         : this.status === 'CALIBRATING'
           ? `🟡 KALIBRASI ${Math.round(this.calibrationProgress * 100)}%`
           : '🔴 LOADING...';
@@ -617,24 +617,51 @@ export class WebcamTracker {
       ctx.fill();
     }
 
-    // Pergelangan tangan (Wrists) — bercahaya emas jika hands up
-    for (const wIdx of [LM.LEFT_WRIST, LM.RIGHT_WRIST]) {
-      const lm = landmarks[wIdx];
+    // Garis panduan batas Hands Up
+    if (this.gesture.handsUpThresholdY > 0) {
+      const lineY = this.gesture.handsUpThresholdY * ph;
+      ctx.strokeStyle = this.gesture.leftHandUp || this.gesture.rightHandUp
+        ? 'rgba(255, 215, 0, 0.75)'
+        : 'rgba(0, 229, 255, 0.35)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(6, lineY);
+      ctx.lineTo(pw - 6, lineY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = this.gesture.leftHandUp || this.gesture.rightHandUp ? '#FFD700' : 'rgba(0, 229, 255, 0.7)';
+      ctx.font = '7px monospace';
+      ctx.fillText('🙌 BATAS TANGAN', 8, Math.max(9, lineY - 2));
+    }
+
+    // Pergelangan tangan (Wrists) — bercahaya emas jika di atas batas tangan
+    const wristChecks = [
+      { idx: LM.LEFT_WRIST, isUp: this.gesture.leftHandUp },
+      { idx: LM.RIGHT_WRIST, isUp: this.gesture.rightHandUp },
+    ];
+    for (const { idx, isUp } of wristChecks) {
+      const lm = landmarks[idx];
       if (!lm || (lm.visibility ?? 1) < 0.2) continue;
 
       const wx = (1 - lm.x) * pw;
       const wy = lm.y * ph;
 
-      if (this.gesture.isHandsUp) {
-        ctx.fillStyle = 'rgba(255, 215, 0, 0.45)';
+      if (isUp) {
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.5)';
         ctx.beginPath();
-        ctx.arc(wx, wy, 7, 0, Math.PI * 2);
+        ctx.arc(wx, wy, 8, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = '#FFD700';
         ctx.beginPath();
-        ctx.arc(wx, wy, 4, 0, Math.PI * 2);
+        ctx.arc(wx, wy, 4.5, 0, Math.PI * 2);
         ctx.fill();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.fillText('🙌', wx - 6, wy - 7);
       } else {
         ctx.fillStyle = '#00E5FF';
         ctx.beginPath();
