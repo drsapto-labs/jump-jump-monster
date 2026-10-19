@@ -13,6 +13,7 @@ import {
   PLAYER_HEIGHT,
   PLAYER_X,
   PLAYER_GROUND_Y,
+  TARGET_FPS,
   JUMP_VELOCITY,
   GRAVITY,
   APEX_GRAVITY_MULTIPLIER,
@@ -219,6 +220,10 @@ export class Player {
       this._state === PlayerState.JUMPING ||
       this._state === PlayerState.DUCKING
     ) {
+      // Normalisasi delta-time terhadap target 60 FPS (1 frame ≈ 16.67ms)
+      // Menjamin durasi melompat (~0.83 detik) konsisten di semua layar (30fps, 60fps, 120fps)
+      const dtScale = Math.min(2.0, dt / (1000 / TARGET_FPS));
+
       // Efek melayang di puncak lompatan (hang time):
       // Saat mendekati puncak lompatan, gravitasi diredam sehingga karakter
       // melayang santai di udara tanpa harus melonjak ke atas langit.
@@ -227,8 +232,8 @@ export class Player {
         ? GRAVITY * APEX_GRAVITY_MULTIPLIER
         : GRAVITY;
 
-      this._vy += effectiveGravity;
-      this._y += this._vy;
+      this._vy += effectiveGravity * dtScale;
+      this._y += this._vy * dtScale;
 
       const groundY = PLAYER_GROUND_Y - this.height;
 

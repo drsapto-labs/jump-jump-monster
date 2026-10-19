@@ -33,8 +33,8 @@ describe('Player', () => {
 
   it('buffers jump input when pressed shortly before landing and executes upon landing', () => {
     player.jump();
-    // Simulate physics until almost landed
-    for (let i = 0; i < 75; i++) player.update(16);
+    // Simulate physics until almost landed (40 frames ≈ 640ms, total airtime ≈ 800ms)
+    for (let i = 0; i < 40; i++) player.update(16);
     expect(player.state).toBe(PlayerState.JUMPING);
 
     // Call jump while in air (within buffer window)
