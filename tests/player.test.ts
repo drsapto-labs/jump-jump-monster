@@ -25,10 +25,26 @@ describe('Player', () => {
   it('does NOT jump while already jumping', () => {
     player.jump();
     const yAfterFirstJump = player.y;
-    player.jump(); // kedua — harus diabaikan
+    player.jump(); // kedua — harus diabaikan seketika (hanya di-buffer)
     expect(player.state).toBe(PlayerState.JUMPING);
-    // Velocity tidak berubah dua kali
+    // Velocity tidak berubah dua kali di frame yang sama
     expect(player.y).toBe(yAfterFirstJump);
+  });
+
+  it('buffers jump input when pressed shortly before landing and executes upon landing', () => {
+    player.jump();
+    // Simulate physics until almost landed
+    for (let i = 0; i < 75; i++) player.update(16);
+    expect(player.state).toBe(PlayerState.JUMPING);
+
+    // Call jump while in air (within buffer window)
+    player.jump();
+
+    // Advance frames to touch ground
+    for (let i = 0; i < 15; i++) player.update(16);
+
+    // Buffered jump triggers upon touchdown, so player immediately leaps again!
+    expect(player.state).toBe(PlayerState.JUMPING);
   });
 
   it('transitions to DUCKING on startDuck()', () => {

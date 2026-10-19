@@ -21,8 +21,8 @@ describe('ObstacleSpawner', () => {
   });
 
   it('spawns obstacles after enough time passes', () => {
-    // Simulate 4 seconds — enough for first spawn
-    for (let i = 0; i < 250; i++) spawner.update(16, 4, i * 16);
+    // Simulate 6 seconds — enough for first spawn (base interval 4.5s)
+    for (let i = 0; i < 375; i++) spawner.update(16, 4, i * 16);
     expect(spawner.activeObstacles.length).toBeGreaterThan(0);
   });
 

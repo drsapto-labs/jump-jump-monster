@@ -15,6 +15,8 @@ import {
   PLAYER_GROUND_Y,
   JUMP_VELOCITY,
   GRAVITY,
+  APEX_GRAVITY_MULTIPLIER,
+  APEX_VELOCITY_THRESHOLD,
   DUCK_HEIGHT,
   PLAYER_MIN_X,
   PLAYER_MAX_X,
@@ -54,6 +56,10 @@ export class Player {
 
   // Bubble Shield
   private _hasShield = false;
+
+  // Jump buffering (mencegah input terlewat saat pemain melompat sesaat sebelum mendarat)
+  private jumpBufferTimer = 0;
+  private readonly JUMP_BUFFER_MS = 240; // 240ms buffer window
 
   // Particle callbacks
   onTakeoff?: () => void;
@@ -130,11 +136,16 @@ export class Player {
     ) {
       this._state = PlayerState.JUMPING;
       this._vy = JUMP_VELOCITY;
+      this.jumpBufferTimer = 0;
       // Squash saat takeoff
       this.scaleX = 0.8;
       this.scaleY = 1.3;
       this.animTimer = 150;
       this.onTakeoff?.();
+    } else if (this._state === PlayerState.JUMPING) {
+      // Jika pemain menekan tombol / melakukan lompatan sesaat sebelum mendarat,
+      // simpan di buffer agar otomatis melompat seketika saat kaki menyentuh tanah!
+      this.jumpBufferTimer = this.JUMP_BUFFER_MS;
     }
   }
 
@@ -170,6 +181,11 @@ export class Player {
       this.hurtTimer -= dt;
     }
 
+    // Jump buffer timer
+    if (this.jumpBufferTimer > 0) {
+      this.jumpBufferTimer -= dt;
+    }
+
     // Horizontal movement (lean)
     const moveDist = PLAYER_LEAN_SPEED * dt;
     if (Math.abs(this.targetX - this._x) <= moveDist) {
@@ -203,7 +219,15 @@ export class Player {
       this._state === PlayerState.JUMPING ||
       this._state === PlayerState.DUCKING
     ) {
-      this._vy += GRAVITY;
+      // Efek melayang di puncak lompatan (hang time):
+      // Saat mendekati puncak lompatan, gravitasi diredam sehingga karakter
+      // melayang santai di udara tanpa harus melonjak ke atas langit.
+      const isApex = Math.abs(this._vy) <= APEX_VELOCITY_THRESHOLD;
+      const effectiveGravity = isApex
+        ? GRAVITY * APEX_GRAVITY_MULTIPLIER
+        : GRAVITY;
+
+      this._vy += effectiveGravity;
       this._y += this._vy;
 
       const groundY = PLAYER_GROUND_Y - this.height;
@@ -220,6 +244,12 @@ export class Player {
           this.scaleY = 0.8;
           this.animTimer = 120;
           this.onLand?.();
+
+          // Eksekusi buffered jump jika pemain menekan tombol / melompat sebelum mendarat
+          if (this.jumpBufferTimer > 0) {
+            this.jumpBufferTimer = 0;
+            this.jump();
+          }
         } else if (this._state === PlayerState.DUCKING) {
           // Tetap ducking jika masih menahan tombol
         }
@@ -347,5 +377,6 @@ export class Player {
     this.scaleX = 1;
     this.scaleY = 1;
     this.animTimer = 0;
+    this.jumpBufferTimer = 0;
   }
 }
