@@ -184,7 +184,7 @@ export function renderCalibrateScreen(
 
   drawText(
     ctx,
-    '• Alternatif      : Keyboard (SPACE / Panah Atas) atau Layar Sentuh',
+    '• Alternatif      : Keyboard (Panah Atas) atau Layar Sentuh',
     guideX + 20,
     guideY + 68,
     {

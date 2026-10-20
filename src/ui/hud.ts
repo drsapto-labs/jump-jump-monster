@@ -177,8 +177,8 @@ export function renderHud(
     });
 
     const hintMsg = isTracking
-      ? 'Lompat di Depan Kamera atau Tekan SPACE'
-      : 'Tekan SPACE atau Panah Atas untuk Lompat';
+      ? 'Lompat di Depan Kamera'
+      : 'Lompat di Depan Kamera atau Panah Atas';
 
     drawText(ctx, hintMsg, CANVAS_WIDTH / 2, hintY + 20, {
       font: font('captionBold'),

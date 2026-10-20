@@ -168,7 +168,7 @@ export function renderMenuScreen(
   // 8. Controls Footnote (Subtle)
   drawText(
     ctx,
-    'Lompat di depan kamera atau tekan Spasi untuk melompat',
+    'Lompat di depan kamera untuk melompat',
     CANVAS_WIDTH / 2,
     424,
     {

@@ -84,7 +84,6 @@ export class InputManager {
 
     switch (e.code) {
       case 'ArrowUp':
-      case 'Space':
       case 'KeyW':
         e.preventDefault();
         this.emit(InputAction.JUMP);
@@ -109,6 +108,8 @@ export class InputManager {
         this.emit(InputAction.PAUSE);
         break;
       case 'Enter':
+      case 'Space':
+        e.preventDefault();
         this.emit(InputAction.CONFIRM);
         break;
       case 'KeyM':

@@ -35,14 +35,14 @@ describe('InputManager', () => {
     input.destroy();
   });
 
-  it('emits JUMP on ArrowUp or Space', () => {
+  it('emits JUMP on ArrowUp and CONFIRM on Space', () => {
     const actions: InputAction[] = [];
     input.onAction((a) => actions.push(a));
 
     window.dispatchEvent({ type: 'keydown', code: 'ArrowUp', preventDefault: vi.fn() });
     window.dispatchEvent({ type: 'keydown', code: 'Space', preventDefault: vi.fn() });
 
-    expect(actions).toEqual([InputAction.JUMP, InputAction.JUMP]);
+    expect(actions).toEqual([InputAction.JUMP, InputAction.CONFIRM]);
   });
 
   it('emits DUCK_START on ArrowDown and DUCK_END on keyup', () => {
